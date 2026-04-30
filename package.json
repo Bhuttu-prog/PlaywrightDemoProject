@@ -8,15 +8,22 @@
   },
   "scripts": {
     "test": "playwright test",
+    "test:products": "playwright test e2e/greenkart-products.spec.ts",
+    "test:checkout": "playwright test e2e/greenkart-checkout.spec.ts",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
-    "report": "playwright show-report"
+    "report": "npm run allure:report",
+    "allure:generate": "allure generate allure-results --clean -o allure-report",
+    "allure:open": "allure open allure-report",
+    "allure:report": "npm run allure:generate && npm run allure:open"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@playwright/test": "^1.59.1",
-    "@types/node": "^25.6.0"
+    "@types/node": "^25.6.0",
+    "allure-commandline": "^2.38.1",
+    "allure-playwright": "^3.7.1"
   }
 }
