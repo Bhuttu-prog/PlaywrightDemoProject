@@ -12,7 +12,7 @@
     "test:report": "npm test; npm run allure:report",
     "test:products": "playwright test e2e/greenkart-products.spec.ts",
     "test:checkout": "playwright test e2e/greenkart-checkout.spec.ts",
-    "test:ui": "playwright test --ui --project=ios",
+    "test:ui": "playwright test --ui --project=ios-iphone-15",
     "test:headed": "playwright test --headed",
     "report": "npm run allure:report",
     "allure:generate": "allure generate allure-results --clean -o allure-report",
