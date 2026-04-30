@@ -14,20 +14,34 @@ npm install
 npx playwright install chromium
 ```
 
+To run **every** configured browser project (Firefox, WebKit, Edge, Android, iOS presets), install all bundled browsers:
+
+```bash
+npx playwright install
+```
+
 ## Project layout
 
 | Path | Purpose |
 |------|---------|
 | `e2e/` | Test specs (`*.spec.ts`) |
 | `src/config/urls.ts` | Application base URL; override host with `GREENKART_ORIGIN` |
+| `src/utils/testData.ts` | Shared catalogue data: product names, expected prices, search strings, promo codes, quantities |
+| `src/utils/parsePrice.ts` | Parses price text from the UI into a number (used by `ProductsPage.listedPrice`) |
 | `src/pages/` | Page objects (selectors and user actions per screen) |
 | `src/fixtures/pages.ts` | Extends Playwright `test` to inject `productsPage`, `cartPreviewPage`, `checkoutPage` |
-| `playwright.config.ts` | Test directory, timeouts, Chromium project, Allure reporter, shared `use` options |
+| `playwright.config.ts` | `testDir`, timeouts, **multiple browser projects** (desktop + mobile presets), Allure reporter, shared `use` options |
 
 ## Run tests
 
 ```bash
 npm test
+```
+
+Run only one browser project (faster while developing):
+
+```bash
+npx playwright test --project=chromium
 ```
 
 Run a single spec file:
@@ -85,7 +99,7 @@ npm run allure:open
 | Variable | Description |
 |----------|-------------|
 | `GREENKART_ORIGIN` | Optional. Defaults to `https://rahulshettyacademy.com`. The app path `/seleniumPractise/#/` is appended in `src/config/urls.ts`. |
-| `CI` | When set, Playwright uses stricter rules (e.g. `test.only` forbidden), retries, and a single worker. |
+| `CI` | When set, Playwright forbids `test.only`, uses retries, and runs with a single worker. |
 
 ## Stack
 
@@ -104,27 +118,32 @@ This repository is a focused **UI automation suite** for GreenKart: a small e-co
 
 The code is split so each layer has one job:
 
-1. **`playwright.config.ts`** — Tells the **runner** where tests live (`testDir: e2e`), how long to wait (`timeout`, `expect.timeout`, navigation/action timeouts), which **browser project** to use (Chromium desktop), and how to **report** (only Allure, writing into `allure-results`). It also sets **`use.baseURL`** from the same URL module as navigation, so global defaults stay aligned with `gotoHome()`.
+1. **`playwright.config.ts`** — Tells the **runner** where tests live (`testDir: e2e`), how long to wait (`timeout`, `expect.timeout`, navigation/action timeouts), which **browser projects** to run (Chromium, Firefox, WebKit, Edge, several Android and iOS device presets—each with a **unique** `name`), and how to **report** (only Allure, writing into `allure-results`). It also sets **`use.baseURL`** from the same URL module as navigation, so global defaults stay aligned with `gotoHome()`.
 
 2. **`src/config/urls.ts`** — Single place for the **application URL**. `urls.home` is used by `BasePage.gotoHome()` and imported into the Playwright config for `baseURL`. That avoids duplicating the string and makes environment switches (staging mirror, etc.) a one-line change via `GREENKART_ORIGIN`.
 
-3. **`src/pages/` (Page Object Model)** — Each class represents a **slice of the UI** the tests interact with:
+3. **`src/utils/`** — Small **shared helpers** that are not full page flows:
+
+   - **`testData.ts`** — Constants used by specs (product names, expected Brocolli list price, search prefix, invalid promo string, default quantities) so strings and numbers are not scattered across tests.
+   - **`parsePrice.ts`** — Normalizes price text from the page into a number; **`ProductsPage.listedPrice()`** uses it for catalogue price checks.
+
+4. **`src/pages/` (Page Object Model)** — Each class represents a **slice of the UI** the tests interact with:
 
    - **`BasePage`** — Shared navigation (`gotoHome()`).
-   - **`ProductsPage`** — Search, product cards, quantity steppers, add to cart, cart icon, cart preview visibility, cart badge count.
+   - **`ProductsPage`** — Search, product cards, quantity steppers, add to cart, cart icon, cart preview visibility, cart badge count, **listed price** for a product.
    - **`CartPreviewPage`** — The flyout cart and **Proceed to checkout**.
    - **`CheckoutPage`** — Checkout line items, promo code entry, promo message, place order control.
 
    Locators and low-level clicks/fills live here. If the DOM changes, you update **page objects** first; specs should rarely need selector edits.
 
-4. **`src/fixtures/pages.ts`** — Uses Playwright’s **`test.extend`** to register three **fixtures**: `productsPage`, `cartPreviewPage`, `checkoutPage`. Each test receives fresh instances wired to that test’s `Page`. Specs import `test` and `expect` from this file instead of `@playwright/test`, so they get dependency injection **without** repeating `new ProductsPage(page)` in every file.
+5. **`src/fixtures/pages.ts`** — Uses Playwright’s **`test.extend`** to register three **fixtures**: `productsPage`, `cartPreviewPage`, `checkoutPage`. Each test receives fresh instances wired to that test’s `Page`. Specs import `test` and `expect` from this file instead of `@playwright/test`, so they get dependency injection **without** repeating `new ProductsPage(page)` in every file.
 
-5. **`e2e/*.spec.ts`** — **Scenarios and assertions** only. They group related tests with `test.describe`, use `beforeEach` for common setup (typically `gotoHome()`), and read like short user stories: add items, open cart, proceed, assert checkout or promo behavior.
+6. **`e2e/*.spec.ts`** — **Scenarios and assertions** only. They import **`testData`** for stable inputs, group related tests with `test.describe`, use `beforeEach` for common setup (typically `gotoHome()`), and read like short user stories: add items, open cart, proceed, assert checkout or promo behavior.
 
 ### What the current tests cover
 
-- **`greenkart-products.spec.ts`** — Home catalogue visibility, **search** narrowing the list, **add to cart** with quantity and a **non-zero cart badge** (async polling so the UI can update).
-- **`greenkart-checkout.spec.ts`** — Add product, open cart preview, **proceed to checkout**, assert a line item is visible; separate test for **invalid promo** and visible feedback on the promo message.
+- **`greenkart-products.spec.ts`** — Home catalogue visibility, **search** narrowing the list, **add to cart** with quantity and a **non-zero cart badge** (`expect.poll` while the badge updates), and **listed Brocolli price** matches the value in `testData`.
+- **`greenkart-checkout.spec.ts`** — Add product, open cart preview, **proceed to checkout**, assert a line item is visible; separate test for **invalid promo** and visible feedback on the promo message (inputs from `testData`).
 
 Together they exercise a **realistic path**: browse → search or pick product → cart → checkout surface → promo validation.
 
@@ -136,13 +155,15 @@ On `npm test`, the configured reporter writes **machine-readable result files** 
 
 - **Page objects** improve **maintainability** when selectors or flows change.
 - **Fixtures** reduce **boilerplate** and keep constructors and `page` wiring consistent.
+- **`testData` + `parsePrice`** keep magic strings and parsing logic out of specs and page files stay focused on the DOM.
 - **One URL module** avoids drift between config `baseURL` and actual navigation.
-- **Chromium-only** keeps install and CI faster; you can add Firefox/WebKit projects in config when needed.
+- **Several named browser projects** (desktop + emulated mobile) give coverage breadth; use **`--project=chromium`** (or another name) when you want a fast single-browser run, and install browsers with **`npx playwright install`** when you need them all.
 - **Allure-only reporter** in config keeps a single reporting story; Playwright’s built-in HTML report is not produced by default in this setup.
 
 ### How you would extend it
 
 - New screens or modals: add a **`src/pages/...`** class, expose it from **`src/fixtures/pages.ts`**, then use it in **`e2e`** specs.
+- New catalogue values or promos: extend **`src/utils/testData.ts`** (and **`parsePrice`** or page helpers if the UI format changes).
 - New environments: set **`GREENKART_ORIGIN`** (or extend `urls.ts` with named exports) and optionally add Playwright **projects** per environment.
 - Richer Allure output: use **`allure-js-commons`** (labels, steps, attachments) inside tests or page methods as described in the [Allure Playwright docs](https://allurereport.org/docs/playwright/).
 
@@ -154,7 +175,7 @@ Use these as spoken answers; shorten on the fly if the interviewer wants less de
 
 ### “Walk me through this project.”
 
-“I automated the GreenKart practice e-commerce site with **Playwright** and **TypeScript**. Tests live in **`e2e`**, and I structured the code with **page objects** under **`src/pages`** so selectors and actions stay reusable. I extended Playwright’s **`test` fixture** in **`src/fixtures/pages.ts`** to inject **`productsPage`**, **`cartPreviewPage`**, and **`checkoutPage`** into tests, so specs stay readable and I’m not repeating `new PageObject(page)` everywhere. The **base URL** is centralized in **`src/config/urls.ts`** and wired into **`playwright.config.ts`** for **`baseURL`**. Reporting is **Allure**: the run writes **`allure-results`**, then I generate and open the HTML report with npm scripts. I cover product search, add to cart, checkout line items, and invalid promo behavior.”
+“I automated the GreenKart practice e-commerce site with **Playwright** and **TypeScript**. Tests live in **`e2e`**, with **shared test data** in **`src/utils/testData.ts`** and small helpers like **`parsePrice`**. I structured the code with **page objects** under **`src/pages`** so selectors and actions stay reusable—including a **listed price** helper that uses the parser. I extended Playwright’s **`test` fixture** in **`src/fixtures/pages.ts`** to inject **`productsPage`**, **`cartPreviewPage`**, and **`checkoutPage`**. The **base URL** is in **`src/config/urls.ts`** and mirrored in **`playwright.config.ts`** as **`baseURL`**. **`playwright.config.ts`** also defines **multiple browser projects** (desktop and mobile presets) with **unique names** so UI mode and reports stay consistent. Reporting is **Allure** via **`allure-results`** and npm scripts to generate and open the HTML report. I cover search, add to cart, catalogue price, checkout line items, and invalid promo behavior.”
 
 ### “Why Page Object Model?”
 
@@ -166,7 +187,7 @@ Use these as spoken answers; shorten on the fly if the interviewer wants less de
 
 ### “Where does configuration live versus test logic?”
 
-“**`playwright.config.ts`** is pure **runner configuration**: **`testDir`**, timeouts, **Chromium** project, **Allure** reporter, **`use`** defaults like **`baseURL`**, traces, screenshots on failure. It does not contain business steps. **Test logic** is only in **`e2e`**. **How we interact with the app** is in **`src/pages`**. **URLs** are in **`src/config`**. That separation makes it obvious where to change things for CI, reporting, or UI refactors.”
+“**`playwright.config.ts`** is pure **runner configuration**: **`testDir`**, timeouts, **named browser projects** (Chromium through mobile presets), **Allure** reporter, **`use`** defaults like **`baseURL`**, traces, screenshots on failure. It does not contain business steps. **Test logic** is only in **`e2e`**. **How we interact with the app** is in **`src/pages`**. **URLs** are in **`src/config`**, and **shared literals / parsing** live in **`src/utils`**. That separation makes it obvious where to change things for CI, reporting, or UI refactors.”
 
 ### “How do you handle environments or the base URL?”
 
@@ -174,7 +195,7 @@ Use these as spoken answers; shorten on the fly if the interviewer wants less de
 
 ### “What scenarios did you automate?”
 
-“**Product area**: catalogue visible on load, **search** filters products, **add to cart** with quantity and verification that the **cart count** updates—I used **`expect.poll`** where the badge updates asynchronously. **Checkout area**: open the cart preview, **proceed to checkout**, assert **line items**; and a case for **invalid promo** where I assert the promo feedback element is visible and not empty. Together that’s a credible slice of an e-commerce flow.”
+“**Product area**: catalogue visible on load, **search** filters products, **add to cart** with quantity and verification that the **cart count** updates—I used **`expect.poll`** where the badge updates asynchronously—and I assert **Brocolli’s listed price** against **`testData`**. **Checkout area**: open the cart preview, **proceed to checkout**, assert **line items**; and a case for **invalid promo** driven by **`testData`**, where I assert the promo feedback is visible and not empty. Together that’s a credible slice of an e-commerce flow.”
 
 ### “How does reporting work?”
 
@@ -190,4 +211,4 @@ Use these as spoken answers; shorten on the fly if the interviewer wants less de
 
 ### One-line closing
 
-“It’s a small project, but the **layering**—config, URLs, page objects, fixtures, specs—and **Allure** reporting mirror how I’d structure automation on a production team.”
+“It’s a small project, but the **layering**—config, URLs, **utils / test data**, page objects, fixtures, specs—and **Allure** reporting mirror how I’d structure automation on a production team.”
