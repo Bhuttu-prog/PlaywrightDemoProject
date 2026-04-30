@@ -46,13 +46,31 @@ npm run test:headed
 
 ## Allure report
 
-Tests write raw results to `allure-results/`. Generate the HTML report and open it:
+Tests write raw results to `allure-results/`. The **HTML report is not created by Playwright**; you still run **`allure generate`** (wrapped as `npm run allure:generate`).
+
+**Important:** `npm test && npm run allure:report` **does not** run Allure when tests fail, because a failed `npm test` exits non-zero and the shell **skips everything after `&&`**.
+
+Use one of these instead:
 
 ```bash
-npm test && npm run allure:report
+npm run test:allure
 ```
 
-Or step by step:
+That runs tests, then always generates and opens the report, and **exits with the same code as the test run** (so CI still fails on red tests). The script uses `sh` (macOS/Linux or Git Bash on Windows); otherwise use `npm test; npm run allure:report` manually.
+
+Or use the npm script (same idea: report runs even when tests fail; **exit code** follows the **last** step, so prefer `test:allure` in CI if you need the test run’s exit code):
+
+```bash
+npm run test:report
+```
+
+Equivalent manual command:
+
+```bash
+npm test; npm run allure:report
+```
+
+Step by step:
 
 ```bash
 npm test
@@ -60,7 +78,7 @@ npm run allure:generate
 npm run allure:open
 ```
 
-`npm run report` is the same as `npm run allure:report` (generate then open).
+`npm run report` is the same as `npm run allure:report` (generate then open only; it does not run tests).
 
 ## Environment
 
@@ -160,7 +178,7 @@ Use these as spoken answers; shorten on the fly if the interviewer wants less de
 
 ### “How does reporting work?”
 
-“Playwright is configured with **`allure-playwright`** only. Each run produces raw results under **`allure-results`**. After the run I run **`allure generate`** into **`allure-report`** and **`allure open`** to view it—wrapped as **`npm run allure:report`** and **`npm run report`**. In CI I’d upload **`allure-results`** or the generated HTML as a **pipeline artifact**.”
+“Playwright is configured with **`allure-playwright`** only. Each run produces raw results under **`allure-results`**. The HTML report is a **second step**: **`allure generate`** then **`allure open`**, via **`npm run allure:report`**. I avoid **`npm test && npm run allure:report`** in scripts because **`&&` skips the report when tests fail**; I use **`npm run test:allure`** or **`npm test; npm run allure:report`** so we still get a report for triage, while preserving a non-zero exit for CI. In CI I’d upload **`allure-results`** or the generated HTML as an artifact.”
 
 ### “How would you reduce flakiness?”
 
