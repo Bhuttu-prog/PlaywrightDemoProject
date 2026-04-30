@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { parsePrice } from '../utils/parsePrice';
 import { BasePage } from './BasePage';
 
 export class ProductsPage extends BasePage {
@@ -17,6 +18,11 @@ export class ProductsPage extends BasePage {
 
   productCard(productName: string): Locator {
     return this.page.locator('div.product').filter({ hasText: productName }).first();
+  }
+
+  async listedPrice(productName: string): Promise<number> {
+    const raw = await this.productCard(productName).locator('p.product-price').innerText();
+    return parsePrice(raw);
   }
 
   async searchProduct(keyword: string): Promise<void> {
